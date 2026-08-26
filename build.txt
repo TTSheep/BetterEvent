@@ -1,0 +1,1 @@
+dotnet build BetterEvent.csproj --no-restore -t:BuildMod

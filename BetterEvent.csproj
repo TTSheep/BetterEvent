@@ -1,0 +1,42 @@
+<Project Sdk="Godot.NET.Sdk/4.5.1">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+
+	<!-- 本机 Godot/MegaDot 编辑器路径；其他开发环境可通过 -p:GodotExecutable=... 覆盖。 -->
+	<GodotExecutable Condition=" '$(GodotExecutable)' == '' ">E:\megadot-4.5.1-m.14-windows-x86_64-llvm-editor-csharp\MegaDot_v4.5.1-stable_mono_win64.exe</GodotExecutable>
+	<ModPckPath>$(MSBuildProjectDirectory)\build\$(AssemblyName).pck</ModPckPath>
+  </PropertyGroup>
+
+	<Target Name="CopyCustomOutput" AfterTargets="Build">
+		<ItemGroup>
+			<OutputDlls Include="$(OutputPath)\$(AssemblyName).dll" />
+			<OutputDlls Include="$(OutputPath)\$(AssemblyName).pdb" />
+		</ItemGroup>
+
+		<MakeDir Directories="$(MSBuildProjectDirectory)\build" />
+		<Copy SourceFiles="@(OutputDlls)" DestinationFolder="$(MSBuildProjectDirectory)\build" />
+	</Target>
+
+	<!-- 使用 dotnet build -t:BuildMod 同时编译 DLL 并重新导出包含本地化的 PCK。 -->
+	<Target Name="BuildMod" DependsOnTargets="Build">
+		<Error Condition=" !Exists('$(GodotExecutable)') "
+		       Text="找不到 Godot/MegaDot 编辑器：$(GodotExecutable)" />
+		<Exec Command="&quot;$(GodotExecutable)&quot; --headless --path &quot;$(MSBuildProjectDirectory)&quot; --export-pack &quot;Windows Desktop&quot; &quot;$(ModPckPath)&quot;" />
+	</Target>
+
+	<ItemGroup>
+	  <Content Include="BetterEvent\localization\eng\events.json" />
+	  <Content Include="BetterEvent\localization\zhs\events.json" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Reference Include="0Harmony">
+	    <HintPath>libs\0Harmony.dll</HintPath>
+	  </Reference>
+	  <Reference Include="sts2">
+	    <HintPath>libs\sts2.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+</Project>
