@@ -3,15 +3,13 @@ using HarmonyLib;
 using MegaCrit.Sts2.Core.CardSelection;
 using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Entities.Cards;
-using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Events;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.HoverTips;
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Cards;
 using MegaCrit.Sts2.Core.Models.Events;
-using MegaCrit.Sts2.Core.Nodes.CommonUi;
-using MegaCrit.Sts2.Core.Runs;
 using MegaCrit.Sts2.Core.ValueProps;
 using System;
 using System.Collections.Generic;
@@ -21,7 +19,7 @@ using System.Threading.Tasks;
 namespace BetterEvent.Patch
 {
     /// <summary>
-    /// 优化原版“滑脚木桥”事件：自由选择牌删除
+    /// 优化原版“滑脚木桥”事件：保留原版跨越，并增加三种风险不同的选择。
     /// </summary>
     [HarmonyPatch]
     public static class SlipperyBridgePatch
@@ -37,25 +35,40 @@ namespace BetterEvent.Patch
 
             int removableCardCount = CardPile.Get(PileType.Deck, __instance.Owner)
                 .Cards.Count(card => card.IsRemovable);
+            DynamicVar holdOnOnceHpLoss = new(
+                "HoldOnOnceHpLoss",
+                5m);
+            DynamicVar holdOnToEndHpLoss = new(
+                "HoldOnToEndHpLoss",
+                __instance.Owner.Creature.MaxHp * 0.25m);
 
-            // 原版移除选牌命令不会替事件决定选项是否可用，因此在生成选项时先做数量保护。
+            // 直接保留原版“跨越”：包括随机卡牌、原文本、动态卡名、悬浮提示和移除回调。
+            options.Add(__result[0]);
+
+            // 原版移除选牌命令不会替事件判断选项是否可用，因此生成选项时先做数量保护。
             options.Add(removableCardCount >= 1
-                ? new EventOption(
-                    __instance,
-                    () => OvercomeFix(__instance),
-                    "SLIPPERY_BRIDGE.pages.INITIAL.options.OVERCOMEFIX")
+                ? AddHpLossVariable(
+                    new EventOption(
+                        __instance,
+                        () => HoldOnOnce(
+                            __instance,
+                            holdOnOnceHpLoss.IntValue),
+                        "SLIPPERY_BRIDGE.pages.INITIAL.options.HOLD_ON_ONCE"),
+                    holdOnOnceHpLoss)
                 : new EventOption(
                     __instance,
                     null,
-                    "SLIPPERY_BRIDGE.pages.INITIAL.options.OVERCOMEFIX_LOCKED",
+                    "SLIPPERY_BRIDGE.pages.INITIAL.options.HOLD_ON_ONCE_LOCKED",
                     Array.Empty<IHoverTip>()));
             options.Add(removableCardCount >= 2
-                ? new EventOption(
-                    __instance,
-                    () => HoldOnEndFix(__instance),
-                    "SLIPPERY_BRIDGE.pages.INITIAL.options.HOLD_ON_ENDFIX")
-                    // 使用原版危险提示 API：当前生命值不高于15时，选项显示致命红光。
-                    .ThatDoesDamage(15m)
+                ? AddHpLossVariable(
+                    new EventOption(
+                        __instance,
+                        () => HoldOnToEnd(
+                            __instance,
+                            holdOnToEndHpLoss.IntValue),
+                        "SLIPPERY_BRIDGE.pages.INITIAL.options.HOLD_ON_ENDFIX"),
+                    holdOnToEndHpLoss)
                 : new EventOption(
                     __instance,
                     null,
@@ -67,19 +80,54 @@ namespace BetterEvent.Patch
                 "SLIPPERY_BRIDGE.pages.INITIAL.options.RETURN_NOW"));
             __result = options;
         }
-        private static async Task OvercomeFix(SlipperyBridge slipperyBridge)
+
+        /// <summary>
+        /// 将同一个原版动态变量用于文本替换与危险红光判断。
+        /// </summary>
+        private static EventOption AddHpLossVariable(
+            EventOption option,
+            DynamicVar hpLoss)
         {
+            option.Description.Add(hpLoss);
+            return option.ThatDoesDamage(hpLoss.IntValue);
+        }
+
+        private static async Task HoldOnOnce(
+            SlipperyBridge slipperyBridge,
+            int hpLoss)
+        {
+            await CreatureCmd.Damage(
+                new ThrowingPlayerChoiceContext(),
+                slipperyBridge.Owner.Creature,
+                hpLoss,
+                ValueProp.Unblockable | ValueProp.Unpowered,
+                null,
+                null);
+
             List<CardModel> cards = (await CardSelectCmd.FromDeckForRemoval(prefs: new CardSelectorPrefs(CardSelectorPrefs.RemoveSelectionPrompt, 1), player: slipperyBridge.Owner)).ToList();
             await CardPileCmd.RemoveFromDeck(cards);
-            EventAccess.Finish(slipperyBridge, "SLIPPERY_BRIDGE.pages.OVERCOMEFIX.description");
+
+            // 沿用原版第一次“再撑一会”的后续文本，不在模组中覆盖该本地化。
+            EventAccess.Finish(slipperyBridge, "SLIPPERY_BRIDGE.pages.HOLD_ON_0.description");
         }
-        private static async Task HoldOnEndFix(SlipperyBridge slipperyBridge)
+
+        private static async Task HoldOnToEnd(
+            SlipperyBridge slipperyBridge,
+            int hpLoss)
         {
-            await CreatureCmd.Damage(new ThrowingPlayerChoiceContext(), slipperyBridge.Owner.Creature, 15, ValueProp.Unblockable | ValueProp.Unpowered, null, null);
+            await CreatureCmd.Damage(
+                new ThrowingPlayerChoiceContext(),
+                slipperyBridge.Owner.Creature,
+                hpLoss,
+                ValueProp.Unblockable | ValueProp.Unpowered,
+                null,
+                null);
+
             List<CardModel> cards = (await CardSelectCmd.FromDeckForRemoval(prefs: new CardSelectorPrefs(CardSelectorPrefs.RemoveSelectionPrompt, 2), player: slipperyBridge.Owner)).ToList();
             await CardPileCmd.RemoveFromDeck(cards);
             EventAccess.Finish(slipperyBridge, "SLIPPERY_BRIDGE.pages.HOLD_ON_ENDFIX.description");
         }
+
         private static async Task ReturnNow(SlipperyBridge slipperyBridge)
         {
             await CreatureCmd.Heal(slipperyBridge.Owner.Creature, 10);

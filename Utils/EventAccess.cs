@@ -79,5 +79,6 @@ namespace BetterEvent.Utils
         {
             SetInitialEventStateMethod.Invoke(eventModel, [false]);
         }
+
     }
 }
