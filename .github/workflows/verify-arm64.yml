@@ -1,0 +1,109 @@
+name: Build and verify ARM64 compatibility
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore BetterEvent.csproj
+
+      - name: Build Release DLL
+        run: dotnet build BetterEvent.csproj -c Release --no-restore
+
+      - name: Verify managed assembly architecture
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dllPath = (Resolve-Path ".\build\BetterEvent.dll").Path
+          $stream = [IO.File]::OpenRead($dllPath)
+
+          try {
+              $pe = [System.Reflection.PortableExecutable.PEReader]::new($stream)
+              $assembly = [System.Reflection.Assembly]::LoadFile($dllPath)
+              $machine = $pe.PEHeaders.CoffHeader.Machine.ToString()
+              $peKind = $pe.PEHeaders.PEHeader.Magic.ToString()
+              $corFlags = $pe.PEHeaders.CorHeader.Flags.ToString()
+              $architecture = $assembly.GetName().ProcessorArchitecture.ToString()
+
+              Write-Host "Machine: $machine"
+              Write-Host "PE kind: $peKind"
+              Write-Host "CLR flags: $corFlags"
+              Write-Host "Assembly architecture: $architecture"
+
+              if ($machine -ne "I386") {
+                  throw "Expected the portable MSIL PE header (I386), got $machine."
+              }
+              if ($peKind -ne "PE32") {
+                  throw "Expected PE32 for an AnyCPU assembly, got $peKind."
+              }
+              if ($corFlags -notmatch "ILOnly") {
+                  throw "The assembly is not IL-only: $corFlags."
+              }
+              if ($architecture -notin @("None", "MSIL")) {
+                  throw "The assembly architecture is platform-specific: $architecture."
+              }
+
+              $sts2Reference = $assembly.GetReferencedAssemblies() |
+                  Where-Object Name -eq "sts2"
+              if ($null -eq $sts2Reference) {
+                  throw "The expected sts2 assembly reference is missing."
+              }
+              if ($sts2Reference.ProcessorArchitecture -notin @("None", "MSIL")) {
+                  throw "The sts2 reference is architecture-specific: $($sts2Reference.ProcessorArchitecture)."
+              }
+          }
+          finally {
+              $stream.Dispose()
+          }
+
+      - name: Verify PCK export architecture
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $config = Get-Content ".\export_presets.cfg" -Raw
+
+          if ($config -notmatch 'binary_format/architecture="msil"') {
+              throw "The PCK export architecture is not set to msil."
+          }
+          if ($config -match 'binary_format/architecture="(?:x86_64|arm64)"') {
+              throw "A platform-specific PCK export architecture is configured."
+          }
+
+      - name: Verify release directory contents
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $forbiddenFiles = @(
+              ".\build\sts2.dll",
+              ".\build\0Harmony.dll",
+              ".\build\coreclr.dll"
+          )
+
+          foreach ($file in $forbiddenFiles) {
+              if (Test-Path $file) {
+                  throw "Platform-specific or game-owned dependency was copied: $file."
+              }
+          }
+
+      - name: Upload verified assembly
+        uses: actions/upload-artifact@v4
+        with:
+          name: BetterEvent-msil
+          path: |
+            build/BetterEvent.dll
+            build/BetterEvent.pdb
+          if-no-files-found: error
