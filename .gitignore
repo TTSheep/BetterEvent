@@ -9,6 +9,11 @@
 # Local mod export output
 /build/
 
+# Local reference material and Workshop screenshots
+/SourceCode/
+/图片/
+/STS2_MOD_架构检验工作流.md
+
 # Visual Studio / JetBrains project state
 .vs/
 .idea/
