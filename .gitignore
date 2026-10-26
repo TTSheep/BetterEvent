@@ -9,6 +9,10 @@
 # Local mod export output
 /build/
 
+# Copyrighted game assemblies and local binary references
+/libs/
+sts2.dll
+
 # Local reference material and Workshop screenshots
 /SourceCode/
 /图片/

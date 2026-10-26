@@ -93,11 +93,14 @@ mods/
 在项目根目录执行：
 
 ```powershell
+$env:STS2_DLL_PATH = "D:\SteamLibrary\steamapps\common\Slay the Spire 2\data_sts2_windows_x86_64\sts2.dll"
 dotnet restore BetterEvent.csproj
 dotnet build BetterEvent.csproj -c Release --no-restore -t:BuildMod
 ```
 
-构建产物会输出到 `build` 目录。若本机 Godot/MegaDot 路径与项目配置不同，请修改项目中的 `GodotExecutable`，或在构建时传入对应属性。
+请将示例路径替换为本机游戏目录中的 `sts2.dll`。游戏程序集仅作为本地编译引用，不应提交或随 Mod 分发。
+
+构建产物会输出到 `build` 目录。若本机 Godot/MegaDot 路径与项目配置不同，请修改项目中的 `GodotExecutable`，或在构建时传入对应属性。也可以不设置环境变量，直接在构建命令中传入 `-p:Sts2AssemblyPath="完整路径\sts2.dll"`。
 
 ## 反馈问题
 

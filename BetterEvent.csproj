@@ -12,7 +12,14 @@
 	<!-- 本机 Godot/MegaDot 编辑器路径；其他开发环境可通过 -p:GodotExecutable=... 覆盖。 -->
 	<GodotExecutable Condition=" '$(GodotExecutable)' == '' ">E:\megadot-4.5.1-m.14-windows-x86_64-llvm-editor-csharp\MegaDot_v4.5.1-stable_mono_win64.exe</GodotExecutable>
 	<ModPckPath>$(MSBuildProjectDirectory)\build\$(AssemblyName).pck</ModPckPath>
+	<!-- 游戏程序集不得随源码分发。通过环境变量 STS2_DLL_PATH 或 -p:Sts2AssemblyPath=... 指向本机 sts2.dll。 -->
+	<Sts2AssemblyPath Condition=" '$(Sts2AssemblyPath)' == '' ">$(STS2_DLL_PATH)</Sts2AssemblyPath>
   </PropertyGroup>
+
+	<Target Name="ValidateLocalGameReference" BeforeTargets="ResolveReferences">
+		<Error Condition=" '$(Sts2AssemblyPath)' == '' or !Exists('$(Sts2AssemblyPath)') "
+		       Text="找不到本机 sts2.dll。请设置 STS2_DLL_PATH 环境变量，或传入 -p:Sts2AssemblyPath=&quot;完整路径\sts2.dll&quot;。" />
+	</Target>
 
 	<Target Name="CopyCustomOutput" AfterTargets="Build">
 		<ItemGroup>
@@ -43,12 +50,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <Reference Include="0Harmony">
-	    <HintPath>libs\0Harmony.dll</HintPath>
-	    <Private>false</Private>
-	  </Reference>
+	  <PackageReference Include="Lib.Harmony" Version="2.4.2" />
 	  <Reference Include="sts2">
-	    <HintPath>libs\sts2.dll</HintPath>
+	    <HintPath>$(Sts2AssemblyPath)</HintPath>
 	    <Private>false</Private>
 	  </Reference>
 	</ItemGroup>
