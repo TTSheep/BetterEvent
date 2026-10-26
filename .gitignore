@@ -17,6 +17,7 @@ sts2.dll
 /SourceCode/
 /图片/
 /STS2_MOD_架构检验工作流.md
+/.github/workflows/verify-arm64.yml
 
 # Visual Studio / JetBrains project state
 .vs/
